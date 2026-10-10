@@ -48,16 +48,57 @@ build.bat
 
 ### بعد البناء
 
-الملف الناتج **غير موقّع**. أندرويد لن يثبّته قبل التوقيع. لتجربة سريعة:
+الملف الناتج **غير موقّع**، وأندرويد لن يثبّته قبل التوقيع.
+
+### ⚠️ لا تستخدم `jarsigner`
+
+هذا التطبيق `targetSdkVersion = 36`. و**أندرويد 11 (API 30) فما فوق يرفض أي APK موقّع v1 فقط**، مهما كان التو��يق صحيحًا، ويفشل التثبيت بـ:
+
+```
+INSTALL_PARSE_FAILED_NO_CERTIFICATES
+INSTALL_PARSE_FAILED_NO_CERTIFICATES: Failed to collect certificates
+```
+
+وهذه تظهر للمستخدم بالضبط كـ: «لم يتم تثبيت التطبيق… الحزمة لا تبدو صالحة».
+
+`jarsigner` ينتج **v1 فقط** — فهو لا يكفي هنا. استخدم **`apksigner`** الذي ينتج v2 و v3.
+
+### الطريقة الصحيحة: zipalign ثم apksigner
+
+المتطلبات: **Android SDK Build-Tools** (`apksigner` + `zipalign`).
 
 ```bash
-keytool -genkeypair -keystore debug.keystore -storepass android -keypass android \
+# 1) محاذاة الملفات على حدود 4 بايت (تحسين أداء التثبيت)
+zipalign -f -p 4 Yawqat.apk Yawqat_aligned.apk
+
+# 2) مفتاح تجريبي
+keytool -genkeypair -v -keystore debug.keystore -storepass android -keypass android \
         -alias androiddebugkey -dname "CN=Android Debug,O=Android,C=US" \
         -keyalg RSA -keysize 2048 -validity 10000
 
-jarsigner -keystore debug.keystore -storepass android -keypass android \
-          -sigalg SHA256withRSA -digestalg SHA-256 Yawqat.apk androiddebugkey
+# 3) توقيع v2 + v3
+apksigner sign \
+    --ks debug.keystore --ks-pass pass:android --key-pass pass:android \
+    --ks-key-alias androiddebugkey \
+    --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+    --min-sdk-version 24 \
+    --out Yawqat_signed.apk Yawqat_aligned.apk
+
+# 4) التحقق — يجب أن ترى v2 و v3 = true
+apksigner verify --verbose --print-certs Yawqat_signed.apk
 ```
+
+النتيجة المتوقعة:
+
+```
+Verifies
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Number of signers: 1
+```
+
+> `--min-sdk-version 24` يطابق `minSdkVersion` للتطبيق، فيتخطّى apksigner توقيع v1
+> لأنه غير مطلوب أصلًا لأي جهاز يستطيع تشغيل التطبيق.
 
 > مفتاح التوقيع الحقيقي (`release.jks`) **ليس** في هذا المستودع لأسباب أمنية.
 > إذا كان لديك المفتاح الأصلي، وقّع بنفسه وعندها يمكن للتحديث الكتابة فوق النسخة المثبتة بدل حذفها.
@@ -87,6 +128,8 @@ jarsigner -keystore debug.keystore -storepass android -keypass android \
 |---|---|
 | Package | `com.moslay` |
 | الإصدار | `17.0.9` (versionCode `10349`) |
+| minSdkVersion | `24` (أندرويد 7.0) |
+| targetSdkVersion | `36` (أندرويد 16) |
 | النشاط الرئيسي | `com.moslay.activities.SplashScreenActivity` |
 | عدد الأنشطة | 106 |
 
