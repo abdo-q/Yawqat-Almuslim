@@ -1,0 +1,22 @@
+# apktool build output / caches (regenerated on every build)
+build/
+dist/
+.cxx/
+.gradle/
+local.properties
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.iml
+.idea/
+.vscode/
+
+# signing material - never commit
+*.jks
+*.keystore
+debug.keystore
+keystore.properties
+
+# java
+*.class
